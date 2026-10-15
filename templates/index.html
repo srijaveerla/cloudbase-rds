@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudBase - RDS Student Records</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#1f2430;--muted:#6b7280;--accent:#2563eb;--line:#e5e7eb;--danger:#dc2626}
+@media(prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1b1f2a;--text:#e6e8ee;--muted:#9aa3b2;--line:#2a2f3c}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.wrap{max-width:980px;margin:0 auto;padding:24px 16px}h1{font-size:22px;margin:0 0 4px}.sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.stats{display:flex;gap:12px;flex-wrap:wrap}.stat{flex:1;min-width:140px;background:var(--bg);border-radius:10px;padding:12px}
+.stat b{font-size:22px;display:block}.stat span{color:var(--muted);font-size:12px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);width:100%}
+button{padding:8px 12px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:14px}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}button.del{background:transparent;color:var(--danger);border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:var(--muted);font-weight:500;padding:8px;border-bottom:1px solid var(--line)}
+td{padding:8px;border-bottom:1px solid var(--line)}td.r{text-align:right;white-space:nowrap}.wide{overflow-x:auto}
+#msg{font-size:13px;margin-top:8px;min-height:18px;color:var(--muted)}
+</style></head><body><div class="wrap">
+<h1>🗄️ CloudBase</h1><div class="sub">Student records stored in: <b>{{ db_kind }}</b></div>
+<div class="card"><div class="stats" id="stats"></div></div>
+<div class="card"><form id="f">
+<input id="name" placeholder="Name" required><input id="email" type="email" placeholder="Email" required>
+<input id="department" placeholder="Department" required><input id="year" type="number" min="1" max="6" placeholder="Year" required>
+<input id="cgpa" type="number" step="0.01" min="0" max="10" placeholder="CGPA" required>
+<button type="submit" id="saveBtn">Add student</button></form><div id="msg"></div></div>
+<div class="card"><input id="q" placeholder="Search by name, email or department..." style="margin-bottom:10px">
+<div class="wide"><table><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Dept</th><th>Year</th><th>CGPA</th><th></th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</div><script>
+const $=id=>document.getElementById(id);let editId=null,cache=[];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function loadStats(){const s=await (await fetch('/api/stats')).json();
+$('stats').innerHTML=`<div class="stat"><b>${s.total}</b><span>Total students</span></div><div class="stat"><b>${s.avg_cgpa}</b><span>Average CGPA</span></div>`+
+Object.entries(s.by_department).map(([d,c])=>`<div class="stat"><b>${c}</b><span>${esc(d)}</span></div>`).join('');}
+async function load(){cache=await (await fetch('/api/students?q='+encodeURIComponent($('q').value))).json();
+$('rows').innerHTML=cache.map(s=>`<tr><td>${s.id}</td><td>${esc(s.name)}</td><td>${esc(s.email)}</td><td>${esc(s.department)}</td><td>${s.year}</td><td>${s.cgpa}</td>
+<td class="r"><button class="ghost" onclick="edit(${s.id})">Edit</button> <button class="del" onclick="del(${s.id})">Delete</button></td></tr>`).join('')||'<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:20px">No students yet</td></tr>';
+loadStats();}
+function edit(id){const s=cache.find(x=>x.id===id);editId=id;
+['name','email','department','year','cgpa'].forEach(k=>$(k).value=s[k]);$('saveBtn').textContent='Update student';window.scrollTo(0,0);}
+async function del(id){if(!confirm('Delete student #'+id+'?'))return;await fetch('/api/students/'+id,{method:'DELETE'});load();}
+$('f').onsubmit=async e=>{e.preventDefault();
+const body=JSON.stringify(Object.fromEntries(['name','email','department','year','cgpa'].map(k=>[k,$(k).value])));
+const r=await fetch(editId?'/api/students/'+editId:'/api/students',{method:editId?'PUT':'POST',headers:{'Content-Type':'application/json'},body});
+const d=await r.json();$('msg').textContent=r.ok?(editId?'Updated':'Added'):d.error;
+if(r.ok){e.target.reset();editId=null;$('saveBtn').textContent='Add student';load();}};
+$('q').oninput=load;load();
+</script></body></html>
